@@ -4,7 +4,8 @@ Uses Pydantic settings for environment variable management
 """
 
 from pydantic_settings import BaseSettings
-from typing import List
+from typing import List, Union
+from pydantic import field_validator
 import os
 
 class Settings(BaseSettings):
@@ -16,8 +17,16 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
 
-    # CORS
-    allowed_origins: List[str] = ["http://localhost:3000", "http://localhost:3001"]
+    # CORS - Accept string or list to handle Railway environment variables
+    allowed_origins: Union[str, List[str]] = ["http://localhost:3000", "http://localhost:3001"]
+
+    @field_validator('allowed_origins')
+    @classmethod
+    def parse_allowed_origins(cls, v):
+        if isinstance(v, str):
+            # Handle comma-separated string from environment variable
+            return [origin.strip() for origin in v.split(',')]
+        return v
 
     # Application
     environment: str = "development"
