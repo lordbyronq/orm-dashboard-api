@@ -6,16 +6,23 @@ Secure backend for Commander's Dashboard - companion to iORM mobile app
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from typing import List
 import os
 from datetime import datetime
 
 from .database import get_db, engine
-from .models import Base, Flight, Unit, User, SeverityLevel
+from .models import Base, Flight, Unit, User, SeverityLevel, FlightHazard
 from .config import settings
 
-# Create tables
-Base.metadata.create_all(bind=engine)
+# Create tables with error handling
+try:
+    print(f"Attempting to connect to database: {settings.database_url[:50]}...")
+    Base.metadata.create_all(bind=engine)
+    print("Database tables created successfully")
+except Exception as e:
+    print(f"Database connection failed: {e}")
+    print("API will start but database features may not work")
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -50,7 +57,7 @@ async def health_check(db: Session = Depends(get_db)):
     """Detailed health check with database connectivity"""
     try:
         # Test database connection
-        db.execute("SELECT 1")
+        db.execute(text("SELECT 1"))
         db_status = "connected"
     except Exception as e:
         db_status = f"error: {str(e)}"
@@ -175,6 +182,71 @@ async def get_metrics_summary(
                 "end": end_date.isoformat(),
                 "days": days
             }
+        },
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+@app.get("/api/v1/risk-factors")
+async def get_risk_factors(
+    unit_id: str = None,
+    days: int = 30,
+    db: Session = Depends(get_db)
+):
+    """Get aggregated risk factor statistics for histogram"""
+    from datetime import timedelta
+    from sqlalchemy import func
+
+    # Calculate date range
+    end_date = datetime.utcnow()
+    start_date = end_date - timedelta(days=days)
+
+    # Build query to get flight hazards with flight data
+    query = db.query(
+        FlightHazard.hazard_name,
+        FlightHazard.selected_severity,
+        func.count(FlightHazard.id).label('count')
+    ).join(Flight, FlightHazard.flight_id == Flight.id).filter(
+        Flight.flight_date >= start_date,
+        Flight.flight_date <= end_date
+    )
+
+    if unit_id:
+        query = query.filter(Flight.unit_id == unit_id)
+
+    # Group by hazard name and severity
+    results = query.group_by(
+        FlightHazard.hazard_name,
+        FlightHazard.selected_severity
+    ).all()
+
+    # Aggregate data by risk factor
+    risk_factor_data = {}
+    for hazard_name, severity, count in results:
+        if hazard_name not in risk_factor_data:
+            risk_factor_data[hazard_name] = {
+                "riskFactor": hazard_name,
+                "low": 0,
+                "medium": 0,
+                "high": 0,
+                "extreme": 0,
+                "total": 0
+            }
+
+        severity_key = severity.value if severity else "low"
+        risk_factor_data[hazard_name][severity_key] += count
+        risk_factor_data[hazard_name]["total"] += count
+
+    # Convert to list and sort by total count
+    result_list = list(risk_factor_data.values())
+    result_list.sort(key=lambda x: x["total"], reverse=True)
+
+    return {
+        "data": result_list,
+        "total": len(result_list),
+        "date_range": {
+            "start": start_date.isoformat(),
+            "end": end_date.isoformat(),
+            "days": days
         },
         "timestamp": datetime.utcnow().isoformat()
     }

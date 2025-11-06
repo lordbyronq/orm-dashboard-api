@@ -45,8 +45,23 @@ class Settings(BaseSettings):
         super().__init__(**kwargs)
 
         # Handle production environment variables
-        if os.getenv("DATABASE_URL"):
-            self.database_url = os.getenv("DATABASE_URL")
+        # Railway might use different env var names
+        database_env_vars = [
+            "DATABASE_URL",
+            "POSTGRES_URL",
+            "POSTGRESQL_URL",
+            "DATABASE_PRIVATE_URL",
+            "DATABASE_PUBLIC_URL"
+        ]
+
+        for var in database_env_vars:
+            if os.getenv(var):
+                self.database_url = os.getenv(var)
+                print(f"Using database from {var}: {self.database_url[:50]}...")
+                break
+        else:
+            print(f"No database URL found. Checked: {database_env_vars}")
+            print("Available env vars:", [k for k in os.environ.keys() if 'DATABASE' in k.upper() or 'POSTGRES' in k.upper()])
 
         if os.getenv("SECRET_KEY"):
             self.secret_key = os.getenv("SECRET_KEY")
