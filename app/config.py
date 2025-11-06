@@ -28,7 +28,8 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
 
     class Config:
-        env_file = ".env"
+        # Don't try to load .env file in production to avoid JSON parsing issues
+        env_file = ".env" if os.getenv("RAILWAY_ENVIRONMENT") is None else None
         case_sensitive = False
 
     def __init__(self, **kwargs):
@@ -47,5 +48,12 @@ class Settings(BaseSettings):
         if os.getenv("ALLOWED_ORIGINS"):
             self.allowed_origins = os.getenv("ALLOWED_ORIGINS").split(",")
 
-# Global settings instance
-settings = Settings()
+# Global settings instance with error handling
+try:
+    settings = Settings()
+except Exception as e:
+    print(f"Error loading settings: {e}")
+    # Fallback to basic settings
+    import sys
+    settings = Settings(_env_file=None)
+    print("Loaded fallback settings")
