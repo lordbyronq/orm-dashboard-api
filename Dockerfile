@@ -31,6 +31,10 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 # Copy application code
 COPY . .
 
+# Copy and make entrypoint script executable
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 # Create non-root user for security
 RUN useradd --create-home --shell /bin/bash app
 USER app
@@ -42,5 +46,5 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
 # Expose port
 EXPOSE ${PORT:-8000}
 
-# Start command - use PORT environment variable for Railway compatibility
-CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
+# Use entrypoint script to handle PORT environment variable properly
+ENTRYPOINT ["/entrypoint.sh"]
