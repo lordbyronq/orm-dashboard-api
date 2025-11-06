@@ -39,12 +39,8 @@ RUN chmod +x /entrypoint.sh
 RUN useradd --create-home --shell /bin/bash app
 USER app
 
-# Health check - use PORT environment variable or default to 8000
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:${PORT:-8000}/api/v1/health || exit 1
+# Expose port (Railway will set this dynamically)
+EXPOSE 8000
 
-# Expose port
-EXPOSE ${PORT:-8000}
-
-# Use entrypoint script to handle PORT environment variable properly
-ENTRYPOINT ["/entrypoint.sh"]
+# Default start command (Railway will override this with railway.toml)
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
